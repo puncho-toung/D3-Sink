@@ -137,9 +137,39 @@ void main( PS_IN fragment, out PS_OUT result )
 	localNormal.z = sqrt( abs( dot( localNormal.xy, localNormal.xy ) - 0.25 ) );
 	localNormal = normalize( localNormal );
 
-	// traditional very dark Lambert light model used in Doom 3
-	float ldotN = saturate( dot3( localNormal, lightVector ) );
+	// traditional very dark Lambert light model used in Doom 3, causes problems with deep normal maps
+	// float ldotN = saturate( dot3( localNormal, lightVector ) );
 
+	//puncho start
+	// View-dependent normal contrast
+{
+        float NdotV = saturate(dot3(localNormal, viewVector));
+        float grazing = 1.0 - NdotV; // 0 head-on, 1 grazing
+        float contrast = 1.0 + grazing * vdContrastStrength;
+        localNormal.xy *= contrast;
+        localNormal = normalize(localNormal);
+    }
+	
+	// Horizon-bent normal to tame deep normal premature shadowing
+    const float horizonBlendStrength = 2.5;
+    const float horizonBlendOffset = 0.15;
+
+    float NbL = dot3(localNormal, lightVector);
+    float NgL = lightVector.z;
+
+    float3 N_lit = localNormal;
+    if ((NbL < horizonBlendOffset) && (NgL > 0.0))
+    {
+        float blend = saturate(
+        (horizonBlendOffset - NbL) * horizonBlendStrength
+        / max(NgL, 0.001)
+    );
+        N_lit = normalize(lerp(localNormal, float3(0.0, 0.0, 1.0), blend));
+    }
+
+    float ldotN = saturate(dot3(N_lit, lightVector));
+	//puncho end
+	
 #if defined(USE_HALF_LAMBERT)
 	// RB: http://developer.valvesoftware.com/wiki/Half_Lambert
 	float halfLdotN = dot3( localNormal, lightVector ) * 0.5 + 0.5;
